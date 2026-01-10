@@ -9,6 +9,10 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@mysten/sui": "^1.45.2",
+    "@polymedia/suitcase-core": "^0.0.67",
+    "@polymedia/suitcase-react": "^0.0.67",
+    "jwt-decode": "^4.0.0",
     "next": "16.1.1",
     "react": "19.2.3",
     "react-dom": "19.2.3"
