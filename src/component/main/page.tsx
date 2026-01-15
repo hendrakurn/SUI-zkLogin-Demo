@@ -76,16 +76,27 @@ export default function Test() {
         }
     }, [modalContent]);
 
+
+
     // Jangan panggil sessionStorage di top-level — pindahkan ke useEffect
     async function beginZkLogin(provider: OpenIdProvider) {
         setModalContent(`🔑 Logging in with ${provider}...`);
 
+        // 2.1: Ambil epoch saat ini dari Sui blockchain
         const { epoch } = await suiClient.getLatestSuiSystemState();
         const maxEpoch = Number(epoch) + MAX_EPOCH;
+
+        // 2.2: Generate ephemeral keypair (temporary, untuk session ini saja)
         const ephemeralKeyPair = new Ed25519Keypair();
+
+        // 2.3: Generate randomness (untuk nonce)
         const randomness = generateRandomness();
+
+        // 2.4: Hitung nonce = hash(ephPk, maxEpoch, randomness)
+        // Nonce ini akan di-embed di JWT dan diverifikasi oleh ZK prover
         const nonce = generateNonce(ephemeralKeyPair.getPublicKey(), maxEpoch, randomness);
 
+        // 2.5: Simpan setup data ke sessionStorage (akan dipanggil lagi di tahap 5)
         saveSetupData({
             provider,
             maxEpoch,
@@ -93,6 +104,8 @@ export default function Test() {
             ephemeralPrivateKey: ephemeralKeyPair.getSecretKey(),
         });
 
+
+        // 2.6: Build URL untuk redirect ke Google OAuth
         const urlParams = new URLSearchParams({
             client_id: config.CLIENT_ID_GOOGLE,
             redirect_uri: window.location.origin, // "http://localhost:3000"
@@ -106,14 +119,13 @@ export default function Test() {
         window.location.replace(loginUrl);
     }
 
-
-
-
-
-
     async function completeZkLogin() {
         console.log("HASH:", window.location.hash);
+        // 4.1: Extract fragment dari URL
         const urlFragment = window.location.hash.substring(1);
+        // Dari: #id_token=xxx&authuser=0
+        // Menjadi: id_token=xxx&authuser=0
+
         const urlParams = new URLSearchParams(urlFragment);
         const jwt = urlParams.get("id_token");
         if (!jwt) return;
@@ -121,14 +133,25 @@ export default function Test() {
 
         if (!jwt) return;
 
+        // 4.2: Bersihkan URL fragment (agar tidak terlihat di history)
         window.history.replaceState(null, "", window.location.pathname);
 
+        // 4.3: Decode JWT untuk lihat payload
         const jwtPayload = jwtDecode(jwt);
+
+        // 4.4: Validasi basic JWT
         if (!jwtPayload.sub || !jwtPayload.aud) {
             console.warn("[completeZkLogin] missing jwt.sub or jwt.aud");
             return;
         }
 
+
+
+        // 5.1: Tentukan request ke salt service
+        // Salt service bisa:
+        // - Public endpoint (kembalikan salt yang sama untuk sub+aud yang sama)
+        // - Private endpoint (kembalikan salt baru setiap kali)
+        // Untuk demo, kita pakai dummy salt service
         const requestOptions =
             config.URL_SALT_SERVICE === "/dummy-salt-service.json"
                 ? { method: "GET" }
