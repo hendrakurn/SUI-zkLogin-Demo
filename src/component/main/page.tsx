@@ -19,7 +19,8 @@ import { jwtDecode } from "jwt-decode";
 import { useEffect, useRef, useState } from "react";
 import config from "@/config.json";
 
-const NETWORK: NetworkName = "devnet";
+
+const NETWORK = "devnet" as const; 
 const MAX_EPOCH = 2;
 
 const suiClient = new SuiClient({

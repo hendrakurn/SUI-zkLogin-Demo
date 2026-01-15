@@ -1,7 +1,10 @@
-import { Ed25519Keypair, SuiClient, getFullnodeUrl, TransactionBlock } from "@mysten/sui.js/client";
-import { generateNonce, generateRandomness, parseJwt } from "@mysten/sui/zklogin";
-import jwtDecode from "jwt-decode";
+import { SuiClient, getFullnodeUrl } from "@mysten/sui/client";
+import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
+import { Transaction } from "@mysten/sui/transactions";
+import { generateNonce, generateRandomness } from "@mysten/sui/zklogin";
+import { jwtDecode } from "jwt-decode";
 import { ZkLoginSession, ProverResponse, TransactionResult } from "./types";
+
 
 const ZKLOGIN_PROVER_URL = process.env.NEXT_PUBLIC_ZKLOGIN_PROVER_URL!;
 const SUI_RPC_URL = process.env.NEXT_PUBLIC_SUI_RPC_URL!;
@@ -15,8 +18,9 @@ const suiClient = new SuiClient({ url: SUI_RPC_URL });
  */
 export function generateEphemeralKeypair(): ZkLoginSession {
   const ephemeralKeypair = new Ed25519Keypair();
-  const ephemeralPublicKey = ephemeralKeypair.getPublicKey().toRawBytes().toString("hex");
+  const ephemeralPublicKey = Buffer.from(ephemeralKeypair.getPublicKey().toRawBytes()).toString("hex");
   const ephemeralPrivateKey = ephemeralKeypair.getSecretKey();
+  
 
   // Max epoch untuk sesi ini (misal 2 epoch dari sekarang)
   const maxEpoch = Math.floor(Date.now() / 1000) + 3600; // 1 jam dari sekarang (rough estimate)
@@ -117,27 +121,31 @@ export async function sendZkLoginTransaction(
   zkProof: any
 ): Promise<TransactionResult> {
   try {
-    const txBlock = new TransactionBlock();
+    const txBlock = new Transaction();
 
     // Contoh: transfer 0.001 SUI ke diri sendiri
-    const [coin] = txBlock.splitCoins(txBlock.gas, [txBlock.pure(1_000_000)]); // 0.001 SUI
-    txBlock.transferObjects([coin], txBlock.pure(address));
+    const [coin] = txBlock.splitCoins(txBlock.gas, [txBlock.pure.u64(1_000_000)]); // 0.001 SUI
+    txBlock.transferObjects([coin], txBlock.pure.address(address));
 
     // Sign dengan ephemeral key
     const ephemeralKeypair = Ed25519Keypair.fromSecretKey(
       Buffer.from(ephemeralPrivateKey, "hex")
     );
 
-    const signature = await txBlock.sign({ signer: ephemeralKeypair });
+  
+    const { bytes, signature } = await txBlock.sign({ signer: ephemeralKeypair });
 
     // Tambahkan zkLogin signature wrapper
     // (This is simplified; actual implementation perlu assemble zkLoginSignature properly)
     
     // Execute transaksi
     const result = await suiClient.executeTransactionBlock({
-      transactionBlock: txBlock,
-      signature: signature,
-    });
+  transactionBlock: bytes, // ✅ Uint8Array — valid
+  signature,
+  options: {
+    showEffects: true,
+  },
+});
 
     console.log("[zkLogin] Transaction digest:", result.digest);
 
